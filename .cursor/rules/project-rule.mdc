@@ -1,0 +1,7 @@
+---
+description: please use aws official documents to understand the s3 vectore bucket.
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-getting-started.html
+globs:
+alwaysApply: false
+---

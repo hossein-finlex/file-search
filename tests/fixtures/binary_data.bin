@@ -1,0 +1,3 @@
+This file has a .bin extension and should be detected as application/octet-stream.
+It should be rejected by the file validation due to unsupported MIME type.
+This tests the MIME type filtering functionality. 

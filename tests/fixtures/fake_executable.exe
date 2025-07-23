@@ -1,0 +1,3 @@
+This is not a real executable file.
+It's just a text file with a .exe extension to test security validation.
+The file validation should block this file due to the dangerous extension. 

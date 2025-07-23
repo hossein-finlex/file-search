@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  s3vector-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: s3vector-service-dev
+    ports:
+      - "8000:8000"
+    environment:
+      # AWS Configuration (Profile-based authentication)
+      - AWS_PROFILE=${AWS_PROFILE:-bedrock}
+      - AWS_REGION=${AWS_REGION:-eu-west-1}
+      - AWS_CONFIG_FILE=/home/appuser/.aws/config
+      - AWS_SHARED_CREDENTIALS_FILE=/home/appuser/.aws/credentials
+      
+      # S3 Vector Configuration (requires AWS S3 Vectors preview access)
+      - S3_VECTOR_BUCKET_NAME=${S3_VECTOR_BUCKET_NAME}
+      - S3_VECTOR_INDEX_NAME=${S3_VECTOR_INDEX_NAME}
+      
+      # Vector Configuration
+      - VECTOR_DIMENSION=${VECTOR_DIMENSION:-384}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      
+      # Service Configuration
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=true
+    volumes:
+      # Mount source code for development (hot reload)
+      - .:/app
+      # Exclude virtual environment and other unnecessary files
+      - /app/venv
+      - /app/__pycache__
+      - /app/.git
+      # Mount for persistent data
+      - ./data:/app/data
+      # Mount for logs
+      - ./logs:/app/logs
+      # Mount AWS credentials for profile-based authentication (to appuser home)
+      - ~/.aws:/home/appuser/.aws:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - s3vector-network
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Development database (optional)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: s3vector-postgres-dev
+  #   environment:
+  #     POSTGRES_DB: s3vector_dev
+  #     POSTGRES_USER: s3vector
+  #     POSTGRES_PASSWORD: s3vector_dev
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   networks:
+  #     - s3vector-network
+
+networks:
+  s3vector-network:
+    driver: bridge
+
+# volumes:
+#   postgres-data: 

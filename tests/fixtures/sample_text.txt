@@ -1,0 +1,14 @@
+This is a sample text file for testing file validation.
+It contains multiple lines to ensure proper text extraction.
+This file should pass all validation checks as it's a valid text file.
+
+Content includes:
+- Plain text content
+- Multiple paragraphs
+- Standard UTF-8 encoding
+
+This file is used to test:
+- Text file validation
+- MIME type detection (text/plain)
+- File size validation (small file)
+- Successful upload scenarios 
