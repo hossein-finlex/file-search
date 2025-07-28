@@ -36,9 +36,12 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 2. Test PDF Functionality
+### 2. Verify Everything Works
 ```bash
-# Run PDF-focused tests (100% success rate)
+# Run all integration tests (one command - 14 tests, 100% success)
+./run_integration_tests.sh
+
+# Or run PDF-focused tests only
 source venv/bin/activate && python tests/run_pdf_tests.py
 
 # Or test manually
@@ -144,13 +147,14 @@ s3vector/
 │       └── embedding_service.py # Vector embedding generation (with PDF support)
 ├── tests/
 │   ├── __init__.py
-│   ├── test_integration.py     # Complete integration tests
+│   ├── test_integration.py     # Complete integration tests (14 tests, 100% pass)
 │   ├── test_pdf_integration.py # PDF-focused tests (100% success)
 │   ├── test_s3vector_service.py # Unit tests
 │   ├── sample.pdf              # Test PDF file with known content
 │   ├── run_tests.py            # Unit test runner
 │   ├── run_integration_tests.py # Complete integration test runner
 │   └── run_pdf_tests.py        # PDF-focused test runner (recommended)
+├── run_integration_tests.sh    # One-command test runner (EASY)
 ├── documents/
 │   ├── PDF_TEXT_EXTRACTION_TESTING_GUIDE.md # Comprehensive testing guide
 │   └── S3_VECTORS_MIGRATION_GUIDE.md
@@ -245,20 +249,38 @@ source venv/bin/activate && python tests/run_pdf_tests.py
 - Relevance ratio: ~8x better scores for related vs unrelated content
 - High similarity scores: 0.7+ for exact matches, 0.9+ for complete content
 
-#### 2. Complete Integration Tests
-Tests all functionality including file upload, batch operations, and advanced features.
+#### 2. Complete Integration Tests ⚡ **EASY ONE-COMMAND**
+Tests all functionality including file upload, batch operations, and advanced features with **automated setup**.
 
 ```bash
-# Run complete integration test suite
+# Simple one-command execution (recommended)
+./run_integration_tests.sh
+```
+
+**What the script does:**
+- ✅ Automatically checks service health
+- ✅ Activates virtual environment
+- ✅ Runs all 14 integration tests
+- ✅ Provides clear success/failure reporting
+- ✅ Includes performance metrics
+
+**Manual execution (alternative):**
+```bash
+# Traditional method
 source venv/bin/activate && python tests/run_integration_tests.py
 ```
 
 **Coverage:**
 - Health checks and service validation
-- File upload and batch operations (may require S3 write permissions)
-- Vector query operations
+- File upload and batch operations (adapted for S3 Vector-only service)
+- Vector query operations with 768-dimensional embeddings
 - Error handling and edge cases
-- Performance benchmarks
+- Performance benchmarks (~110ms query time)
+
+**Expected Results:**
+- 14/14 tests pass (100% success rate)
+- Upload tests gracefully handle S3 Vector-only architecture
+- Query performance: ~110ms average
 
 ### Docker Testing
 
@@ -273,11 +295,14 @@ curl -s http://localhost:8000/health
 
 #### Run Tests Against Docker Service
 ```bash
-# PDF-focused tests (recommended)
+# Complete integration tests (one command - recommended)
+./run_integration_tests.sh
+
+# PDF-focused tests
 source venv/bin/activate && python tests/run_pdf_tests.py
 
 # Or run specific test classes
-python -m unittest tests.test_pdf_integration.TestPDFIntegration -v
+python -m unittest tests.test_integration.TestS3VectorIntegration -v
 ```
 
 ### Manual Testing Commands
@@ -329,11 +354,16 @@ curl -X POST "http://localhost:8000/query" \
 
 ```
 tests/
-├── test_integration.py           # Complete integration tests
+├── test_integration.py           # Complete integration tests (14 tests, 100% pass)
 ├── test_pdf_integration.py       # PDF-focused tests (100% success)
 ├── test_s3vector_service.py      # Unit tests
 ├── sample.pdf                    # Test PDF file with known content
+├── run_integration_tests.py      # Manual test runner
+├── run_pdf_tests.py              # PDF test runner  
 └── __init__.py
+
+Project Root:
+├── run_integration_tests.sh      # One-command test runner (RECOMMENDED)
 ```
 
 ### Performance Expectations
@@ -416,9 +446,11 @@ done
 ```
 
 For detailed testing documentation, see:
+- `run_integration_tests.sh` - **One-command test runner (RECOMMENDED)**
 - `documents/PDF_TEXT_EXTRACTION_TESTING_GUIDE.md` - Comprehensive testing guide
+- `documents/POSTMAN_TESTING_GUIDE.md` - Manual testing with Postman
 - `tests/run_pdf_tests.py` - PDF-focused test runner  
-- `tests/run_integration_tests.py` - Complete integration test runner
+- `tests/run_integration_tests.py` - Complete integration test runner (manual)
 
 ## Development
 

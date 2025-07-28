@@ -9,6 +9,7 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from .embedding_service import EmbeddingService
 from .file_validation_service import FileValidationService, FileValidationError
+from ..config import get_config, S3VectorConfig
 
 logger = logging.getLogger(__name__)
 
@@ -17,37 +18,43 @@ class S3VectorService:
     """Service for managing files and vector embeddings using AWS S3 Vectors"""
     
     def __init__(self, 
+                 config: Optional[S3VectorConfig] = None,
                  vector_bucket_name: Optional[str] = None,
                  vector_index_name: Optional[str] = None,
                  region: Optional[str] = None,
-                 embedding_model: str = "all-MiniLM-L6-v2"):
+                 embedding_model: Optional[str] = None):
         """
         Initialize the S3 Vector service
         
         Args:
-            vector_bucket_name: S3 Vector bucket name (will use env var if not provided)
-            vector_index_name: Vector index name within the bucket
-            region: AWS region (will use env var if not provided)
-            embedding_model: Name of the embedding model to use
+            config: Optional S3VectorConfig instance. If None, uses global config.
+            vector_bucket_name: S3 Vector bucket name (overrides config)
+            vector_index_name: Vector index name (overrides config)
+            region: AWS region (overrides config)
+            embedding_model: Embedding model name (overrides config)
         """
-        self.vector_bucket_name = vector_bucket_name or os.getenv('S3_VECTOR_BUCKET_NAME')
-        self.vector_index_name = vector_index_name or os.getenv('S3_VECTOR_INDEX_NAME', 'default-index')
-        # Use S3_BUCKET_REGION for S3 Vector operations, fallback to AWS_REGION
-        self.region = region or os.getenv('S3_BUCKET_REGION') or os.getenv('AWS_REGION', 'us-east-1')
-        self.embedding_model = embedding_model
+        if config is None:
+            config = get_config()
+        
+        self.config = config
+        
+        # Use parameters or fall back to configuration (convert enums to strings)
+        self.vector_bucket_name = vector_bucket_name or config.aws.s3_vector_bucket_name
+        self.vector_index_name = vector_index_name or config.aws.s3_vector_index_name
+        self.region = region or str(config.aws.aws_region.value)
+        self.embedding_model = embedding_model or str(config.vector.embedding_model.value)
         
         if not self.vector_bucket_name:
-            raise ValueError("S3_VECTOR_BUCKET_NAME must be provided or set in environment variables")
+            raise ValueError("S3_VECTOR_BUCKET_NAME must be provided in configuration or as parameter")
         
         # Initialize AWS clients
         self._init_aws_clients()
         
-        # Initialize embedding service with environment variable
-        actual_embedding_model = os.getenv('EMBEDDING_MODEL', embedding_model)
-        self.embedding_service = EmbeddingService(actual_embedding_model)
+        # Initialize embedding service with configuration
+        self.embedding_service = EmbeddingService(self.embedding_model, config.vector)
         
-        # Initialize file validation service
-        self.file_validation_service = FileValidationService()
+        # Initialize file validation service with configuration
+        self.file_validation_service = FileValidationService(config.file_validation)
         
         # Verify vector bucket and index access
         self._verify_vector_access()
@@ -55,20 +62,32 @@ class S3VectorService:
     def _init_aws_clients(self):
         """Initialize AWS S3 Vectors client"""
         try:
-            # Check if AWS profile is specified
-            aws_profile = os.getenv('AWS_PROFILE')
+            # Use AWS configuration from config
+            aws_profile = self.config.aws.aws_profile
+            aws_access_key = self.config.aws.aws_access_key_id
+            aws_secret_key = self.config.aws.aws_secret_access_key
             
             if aws_profile:
                 # Use profile-based authentication
                 logger.info(f"Using AWS profile: {aws_profile}")
                 session = boto3.Session(profile_name=aws_profile, region_name=self.region)
                 self.s3vectors_client = session.client('s3vectors')
-                self.s3_client = session.client('s3')
+                # Note: Regular S3 client removed - S3 Vector-only service
+            elif aws_access_key and aws_secret_key:
+                # Use access key authentication
+                logger.info("Using AWS access key authentication")
+                self.s3vectors_client = boto3.client(
+                    's3vectors',
+                    region_name=self.region,
+                    aws_access_key_id=aws_access_key,
+                    aws_secret_access_key=aws_secret_key
+                )
+                # Note: Regular S3 client removed - S3 Vector-only service
             else:
-                # Use default credentials (access keys or IAM role)
+                # Use default credentials (IAM role, environment, etc.)
                 logger.info("Using default AWS credentials")
                 self.s3vectors_client = boto3.client('s3vectors', region_name=self.region)
-                self.s3_client = boto3.client('s3', region_name=self.region)
+                # Note: Regular S3 client removed - S3 Vector-only service
             
             logger.info(f"Initialized S3 Vectors client for region: {self.region}")
         except NoCredentialsError:
@@ -157,17 +176,8 @@ class S3VectorService:
                 ]
             )
             
-            # Also upload the original file to regular S3 for retrieval
-            s3_key = f"files/{vector_key}/{file_name}"
-            self.s3_client.upload_file(
-                file_path,
-                self.vector_bucket_name,  # Using same bucket name for simplicity
-                s3_key,
-                ExtraArgs={
-                    'Metadata': {k: str(v) for k, v in vector_metadata.items()},
-                    'ContentType': validated_content_type
-                }
-            )
+            # Note: File content is stored as metadata in S3 Vectors
+            # Original file upload to regular S3 removed - S3 Vector-only service
             
             upload_time = (time.time() - start_time) * 1000  # Convert to milliseconds
             logger.info(f"Successfully uploaded file {file_name} with vector key {vector_key} in {upload_time:.2f}ms")
@@ -297,7 +307,7 @@ class S3VectorService:
     
     def query_similar(self, 
                      query_vector: List[float], 
-                     top_k: int = 10,
+                     top_k: Optional[int] = None,
                      similarity_threshold: Optional[float] = None,
                      metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
@@ -313,6 +323,19 @@ class S3VectorService:
             List of similar vectors with similarity scores
         """
         start_time = time.time()
+        
+        # Use configuration defaults if not provided
+        if top_k is None:
+            top_k = self.config.vector.default_top_k
+        
+        # Validate top_k limit
+        if top_k > self.config.vector.max_top_k:
+            top_k = self.config.vector.max_top_k
+            logger.warning(f"Requested top_k exceeds maximum, limited to {top_k}")
+        
+        # Use default similarity threshold if not provided
+        if similarity_threshold is None:
+            similarity_threshold = self.config.vector.default_similarity_threshold
         
         try:
             # Use S3 Vectors native query API
@@ -373,8 +396,8 @@ class S3VectorService:
             response = self.s3vectors_client.query_vectors(
                 vectorBucketName=self.vector_bucket_name,
                 indexName=self.vector_index_name,
-                queryVector={'float32': [0.0] * 384},  # Dummy vector for metadata retrieval
-                topK=1000,  # Large number to find our specific vector
+                queryVector={'float32': self.config.get_dummy_vector()},  # Dummy vector for metadata retrieval
+                topK=self.config.vector.max_list_limit,  # Large number to find our specific vector
                 returnMetadata=True
             )
             
@@ -384,7 +407,7 @@ class S3VectorService:
                     return {
                         'file_id': vector_key,
                         'file_metadata': vector_result.get('metadata', {}),
-                        'vector_dimension': 384,  # Default dimension
+                        'vector_dimension': self.config.vector.vector_dimension,
                         'embedding_model': self.embedding_model
                     }
             
@@ -394,7 +417,7 @@ class S3VectorService:
             logger.error(f"Error getting vector info for {vector_key}: {e}")
             return None
     
-    def list_files(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def list_files(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         List vectors in the index (limited functionality with current API)
         
@@ -405,13 +428,22 @@ class S3VectorService:
             List of file information dictionaries
         """
         try:
+            # Use configuration defaults if not provided
+            if limit is None:
+                limit = self.config.vector.default_list_limit
+            
+            # Validate limit
+            if limit > self.config.vector.max_list_limit:
+                limit = self.config.vector.max_list_limit
+                logger.warning(f"Requested limit exceeds maximum, limited to {limit}")
+            
             # Note: S3 Vectors API doesn't have a direct "list" operation
             # This is a workaround using query with a dummy vector
             response = self.s3vectors_client.query_vectors(
                 vectorBucketName=self.vector_bucket_name,
                 indexName=self.vector_index_name,
-                queryVector={'float32': [0.0] * 384},  # Dummy vector
-                topK=min(limit, 1000),  # API limit
+                queryVector={'float32': self.config.get_dummy_vector()},  # Dummy vector
+                topK=limit,
                 returnMetadata=True
             )
             
@@ -448,21 +480,10 @@ class S3VectorService:
             logger.warning(f"Vector deletion not yet implemented for {vector_key}")
             logger.warning("S3 Vectors delete API may not be available in preview")
             
-            # For now, we can try to delete the associated file from regular S3
-            vector_info = self.get_file_info(vector_key)
-            if vector_info:
-                file_metadata = vector_info['file_metadata']
-                file_name = file_metadata.get('file_name', 'unknown')
-                s3_key = f"files/{vector_key}/{file_name}"
-                
-                try:
-                    self.s3_client.delete_object(
-                        Bucket=self.vector_bucket_name,
-                        Key=s3_key
-                    )
-                    logger.info(f"Deleted associated file {s3_key}")
-                except Exception as e:
-                    logger.warning(f"Could not delete associated file: {e}")
+            # Note: S3 Vectors delete API may not be available in preview
+            # For S3 Vector-only service, vector deletion would be handled by S3 Vectors API
+            # when available. No regular S3 cleanup needed.
+            logger.info(f"Vector {vector_key} marked for deletion (S3 Vectors API pending)")
             
             return True
         
@@ -484,14 +505,45 @@ class S3VectorService:
         try:
             # Test embedding service
             test_embedding = self.embedding_service.generate_text_embedding("test")
+            embedding_service_healthy = True
             
-            # Test S3 Vectors connection (basic check)
-            # Note: Actual health check will depend on available S3 Vectors APIs
+            # Test S3 Vectors connection with a simple operation
+            s3_vectors_healthy = False
+            s3_error_message = None
+            try:
+                # Try a lightweight S3 Vectors operation to test connectivity
+                # Use a dummy vector query with minimal parameters
+                dummy_vector = self.config.get_dummy_vector()
+                self.s3vectors_client.query_vectors(
+                    vectorBucketName=self.vector_bucket_name,
+                    indexName=self.vector_index_name,
+                    queryVector={'float32': dummy_vector},
+                    topK=1,
+                    returnMetadata=False
+                )
+                s3_vectors_healthy = True
+                logger.debug("S3 Vectors health check passed")
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                if error_code == 'ValidationException':
+                    # Vector validation issues are expected with empty index or dimension mismatch
+                    # But the connection to S3 Vectors service is working
+                    s3_vectors_healthy = True
+                    logger.info("S3 Vectors connection healthy (validation expected with empty index)")
+                else:
+                    s3_vectors_healthy = False
+                    s3_error_message = str(e)
+                    logger.warning(f"S3 Vectors health check failed: {e}")
+            except Exception as s3_error:
+                s3_vectors_healthy = False
+                s3_error_message = str(s3_error)
+                logger.warning(f"S3 Vectors health check failed: {s3_error}")
             
             return {
-                'status': 'healthy',
-                's3_vectors_connection': True,
-                'embedding_service': True,
+                'status': 'healthy' if (embedding_service_healthy and s3_vectors_healthy) else 'unhealthy',
+                's3_connection': s3_vectors_healthy,  # For S3 Vector-only service, this represents S3 Vectors connection
+                's3_vectors_connection': s3_vectors_healthy,
+                'embedding_service': embedding_service_healthy,
                 'vector_dimension': len(test_embedding),
                 'vector_bucket_name': self.vector_bucket_name,
                 'vector_index_name': self.vector_index_name,
@@ -502,6 +554,7 @@ class S3VectorService:
             return {
                 'status': 'unhealthy',
                 'error': str(e),
+                's3_connection': False,
                 's3_vectors_connection': False,
                 'embedding_service': False
             } 

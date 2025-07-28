@@ -6,6 +6,7 @@ from PIL import Image
 import io
 import base64
 import logging
+from ..config import get_config, VectorConfig
 
 # Add PDF text extraction support
 try:
@@ -21,14 +22,19 @@ logger = logging.getLogger(__name__)
 class EmbeddingService:
     """Service for generating vector embeddings from different file types"""
     
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: Optional[str] = None, config: Optional[VectorConfig] = None):
         """
         Initialize the embedding service
         
         Args:
-            model_name: Name of the sentence transformer model to use
+            model_name: Name of the sentence transformer model to use (overrides config)
+            config: Optional VectorConfig instance. If None, uses global config.
         """
-        self.model_name = model_name
+        if config is None:
+            config = get_config().vector
+        
+        self.config = config
+        self.model_name = model_name or str(config.embedding_model.value)
         self.model = None
         self._load_model()
     
@@ -111,9 +117,15 @@ class EmbeddingService:
         text = ' '.join(text.split())
         
         # Truncate if too long (most models have token limits)
-        max_length = 512  # Adjust based on model
+        max_length = self.config.max_text_length
         if len(text) > max_length:
-            text = text[:max_length]
+            if self.config.text_truncation_strategy == "start":
+                text = text[-max_length:]
+            elif self.config.text_truncation_strategy == "middle":
+                half = max_length // 2
+                text = text[:half] + text[-half:]
+            else:  # "end" (default)
+                text = text[:max_length]
         
         return text
     
@@ -152,13 +164,13 @@ class EmbeddingService:
                 image = image.convert('RGB')
             
             # Resize image for processing
-            image = image.resize((224, 224))  # Standard size for many models
+            image = image.resize((self.config.image_resize_width, self.config.image_resize_height))
             
             # Convert to base64 string for text-based embedding
             # This is a simple approach - in production, you might want to use
             # a dedicated image embedding model
             buffer = io.BytesIO()
-            image.save(buffer, format='JPEG')
+            image.save(buffer, format=self.config.image_format)
             img_str = base64.b64encode(buffer.getvalue()).decode()
             
             # Use the base64 string as text for embedding

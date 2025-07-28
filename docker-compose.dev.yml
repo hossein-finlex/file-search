@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   s3vector-service:
     build:
@@ -11,17 +9,19 @@ services:
     environment:
       # AWS Configuration (Profile-based authentication)
       - AWS_PROFILE=${AWS_PROFILE:-bedrock}
-      - AWS_REGION=${AWS_REGION:-eu-west-1}
+      - AWS_REGION=eu-central-1
+      - AWS_DEFAULT_REGION=eu-central-1
       - AWS_CONFIG_FILE=/home/appuser/.aws/config
       - AWS_SHARED_CREDENTIALS_FILE=/home/appuser/.aws/credentials
       
       # S3 Vector Configuration (requires AWS S3 Vectors preview access)
       - S3_VECTOR_BUCKET_NAME=${S3_VECTOR_BUCKET_NAME}
       - S3_VECTOR_INDEX_NAME=${S3_VECTOR_INDEX_NAME}
+      - S3_BUCKET_REGION=eu-central-1
       
       # Vector Configuration
-      - VECTOR_DIMENSION=${VECTOR_DIMENSION:-384}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - VECTOR_DIMENSION=768
+      - EMBEDDING_MODEL=all-mpnet-base-v2
       
       # Service Configuration
       - HOST=0.0.0.0
@@ -38,6 +38,9 @@ services:
       - ./data:/app/data
       # Mount for logs
       - ./logs:/app/logs
+      # Mount test fixtures for integration tests
+      - ./tests/fixtures:/app/tests/fixtures:ro
+      - ./tests/sample.pdf:/app/tests/sample.pdf:ro
       # Mount AWS credentials for profile-based authentication (to appuser home)
       - ~/.aws:/home/appuser/.aws:ro
     restart: unless-stopped

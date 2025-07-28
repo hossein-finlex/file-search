@@ -3,6 +3,7 @@ import mimetypes
 import logging
 from typing import Set, Optional, Dict, Any
 from pathlib import Path
+from ..config import get_config, FileValidationConfig
 
 logger = logging.getLogger(__name__)
 
@@ -15,45 +16,32 @@ class FileValidationError(ValueError):
 class FileValidationService:
     """Service for validating file uploads with configurable limits"""
     
-    def __init__(self):
-        """Initialize the file validation service with environment-based configuration"""
-        # File size limits (in bytes)
-        self.max_file_size = int(os.getenv('MAX_FILE_SIZE_MB', '50')) * 1024 * 1024  # Default 50MB
-        self.max_total_batch_size = int(os.getenv('MAX_BATCH_SIZE_MB', '200')) * 1024 * 1024  # Default 200MB
+    def __init__(self, config: Optional[FileValidationConfig] = None):
+        """
+        Initialize the file validation service with configuration
         
-        # Allowed file types (MIME types)
-        self.allowed_mime_types = self._parse_allowed_types(
-            os.getenv('ALLOWED_FILE_TYPES', 'text/*,application/pdf,image/*')
-        )
+        Args:
+            config: Optional FileValidationConfig instance. If None, uses global config.
+        """
+        if config is None:
+            config = get_config().file_validation
         
-        # Blocked file extensions (security)
-        self.blocked_extensions = self._parse_blocked_extensions(
-            os.getenv('BLOCKED_FILE_EXTENSIONS', '.exe,.bat,.cmd,.scr,.com,.pif,.dll,.sys')
-        )
+        self.config = config
         
-        logger.info(f"File validation initialized: max_size={self.max_file_size/1024/1024:.1f}MB, "
+        # Use configuration properties instead of hardcoded values
+        self.max_file_size = self.config.max_file_size_bytes
+        self.max_total_batch_size = self.config.max_batch_size_bytes
+        self.allowed_mime_types = self.config.allowed_mime_types_set
+        self.blocked_extensions = self.config.blocked_extensions_set
+        self.allow_empty_files = self.config.allow_empty_files
+        self.strict_mime_checking = self.config.strict_mime_type_checking
+        
+        logger.info(f"File validation initialized: max_size={self.config.max_file_size_mb}MB, "
+                   f"max_batch={self.config.max_batch_size_mb}MB, "
                    f"allowed_types={len(self.allowed_mime_types)}, "
                    f"blocked_extensions={len(self.blocked_extensions)}")
     
-    def _parse_allowed_types(self, types_str: str) -> Set[str]:
-        """Parse allowed MIME types from environment variable"""
-        types = set()
-        for mime_type in types_str.split(','):
-            mime_type = mime_type.strip()
-            if mime_type:
-                types.add(mime_type.lower())
-        return types
-    
-    def _parse_blocked_extensions(self, extensions_str: str) -> Set[str]:
-        """Parse blocked file extensions from environment variable"""
-        extensions = set()
-        for ext in extensions_str.split(','):
-            ext = ext.strip().lower()
-            if ext and not ext.startswith('.'):
-                ext = '.' + ext
-            if ext:
-                extensions.add(ext)
-        return extensions
+
     
     def validate_file(self, file_path: str, content_type: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -88,7 +76,7 @@ class FileValidationService:
                 f"size ({self.max_file_size/1024/1024:.1f}MB): {file_name}"
             )
         
-        if file_size == 0:
+        if file_size == 0 and not self.allow_empty_files:
             raise FileValidationError(f"File is empty: {file_name}")
         
         # Check blocked extensions
@@ -192,8 +180,10 @@ class FileValidationService:
     def get_validation_config(self) -> Dict[str, Any]:
         """Get current validation configuration"""
         return {
-            'max_file_size_mb': round(self.max_file_size / 1024 / 1024, 1),
-            'max_batch_size_mb': round(self.max_total_batch_size / 1024 / 1024, 1),
+            'max_file_size_mb': self.config.max_file_size_mb,
+            'max_batch_size_mb': self.config.max_batch_size_mb,
             'allowed_mime_types': sorted(list(self.allowed_mime_types)),
-            'blocked_extensions': sorted(list(self.blocked_extensions))
+            'blocked_extensions': sorted(list(self.blocked_extensions)),
+            'allow_empty_files': self.allow_empty_files,
+            'strict_mime_type_checking': self.strict_mime_checking
         } 

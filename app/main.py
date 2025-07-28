@@ -1,10 +1,11 @@
 import os
 import time
 import logging
+import tempfile
+import json
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
 
 from .models import (
     FileUploadRequest, BatchUploadRequest, QueryRequest,
@@ -13,21 +14,22 @@ from .models import (
 )
 from .services.s3vector_service import S3VectorService
 from .services.file_validation_service import FileValidationError
+from .config import get_config
 
-# Load environment variables
-load_dotenv()
+# Initialize configuration
+config = get_config()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=getattr(logging, config.server.log_level.value))
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+# Initialize FastAPI app with configuration
 app = FastAPI(
-    title="S3 Vector Service",
+    title=config.server.api_title,
     description="A service for storing and querying files in AWS S3 Vector buckets",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    version=config.server.api_version,
+    docs_url=config.server.docs_url,
+    redoc_url=config.server.redoc_url
 )
 
 # Initialize S3 Vector service
@@ -39,7 +41,7 @@ async def startup_event():
     """Initialize the S3 Vector service on startup"""
     global s3vector_service
     try:
-        s3vector_service = S3VectorService()
+        s3vector_service = S3VectorService(config)
         logger.info("S3 Vector service initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize S3 Vector service: {e}")
@@ -56,6 +58,16 @@ async def get_validation_config():
         return s3vector_service.file_validation_service.get_validation_config()
     except Exception as e:
         logger.error(f"Error getting validation config: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/config")
+async def get_service_config():
+    """Get complete service configuration (excluding sensitive data)"""
+    try:
+        return config.to_dict()
+    except Exception as e:
+        logger.error(f"Error getting service config: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -188,6 +200,76 @@ async def upload_batch(request: BatchUploadRequest):
         raise HTTPException(status_code=400, detail=f"Batch validation failed: {str(e)}")
     except Exception as e:
         logger.error(f"Error in batch upload: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/upload/file", response_model=UploadResponse)
+async def upload_file_multipart(
+    file: UploadFile = File(...),
+    metadata: Optional[str] = Form(None)
+):
+    """Upload a single file via multipart form data"""
+    try:
+        if s3vector_service is None:
+            raise HTTPException(status_code=503, detail="Service not initialized")
+        
+        start_time = time.time()
+        
+        # Parse metadata from JSON string if provided
+        file_metadata = {}
+        if metadata:
+            try:
+                file_metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid metadata JSON format")
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as temp_file:
+            # Read and write file content
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Upload file using the existing service
+            file_id = s3vector_service.upload_file(
+                file_path=temp_file_path,
+                metadata=file_metadata,
+                content_type=file.content_type
+            )
+            
+            upload_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+            
+            # Get file info for response
+            file_info = s3vector_service.get_file_info(file_id)
+            if not file_info:
+                raise HTTPException(status_code=500, detail="Failed to retrieve file information")
+            
+            file_metadata_response = file_info['file_metadata']
+            
+            return UploadResponse(
+                file_id=file_id,
+                file_name=file.filename or 'unknown',
+                file_size=len(content),
+                vector_dimension=file_info['vector_dimension'],
+                upload_time_ms=upload_time,
+                s3_key=f"files/{file_id}/{file.filename or 'unknown'}"
+            )
+        
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_file_path)
+            except OSError:
+                pass
+    
+    except FileValidationError as e:
+        logger.warning(f"File validation failed: {e}")
+        raise HTTPException(status_code=400, detail=f"File validation failed: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -346,14 +428,10 @@ async def global_exception_handler(request, exc):
 if __name__ == "__main__":
     import uvicorn
     
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8000"))
-    debug = os.getenv("DEBUG", "false").lower() == "true"
-    
     uvicorn.run(
         "app.main:app",
-        host=host,
-        port=port,
-        reload=debug,
-        log_level="info"
+        host=config.server.host,
+        port=config.server.port,
+        reload=config.server.debug,
+        log_level=config.server.log_level.value.lower()
     ) 

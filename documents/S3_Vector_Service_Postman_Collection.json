@@ -1,0 +1,691 @@
+{
+	"info": {
+		"_postman_id": "s3-vector-service-collection",
+		"name": "S3 Vector Service - Manual Testing",
+		"description": "Complete collection for testing S3 Vector service endpoints with examples and validation tests.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "s3-vector-service"
+	},
+	"item": [
+		{
+			"name": "🏥 Health & Configuration",
+			"item": [
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Service is healthy\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"healthy\");",
+									"});",
+									"",
+									"pm.test(\"S3 connection is working\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.s3_connection).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Check service health status including S3 Vector and embedding service connectivity."
+					},
+					"response": []
+				},
+				{
+					"name": "Service Configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/config",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"config"
+							]
+						},
+						"description": "Get complete service configuration (excluding sensitive data)."
+					},
+					"response": []
+				},
+				{
+					"name": "Validation Configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/validation-config",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"validation-config"
+							]
+						},
+						"description": "Get file validation configuration settings."
+					},
+					"response": []
+				}
+			],
+			"description": "Health checks and configuration endpoints"
+		},
+		{
+			"name": "📁 File Management",
+			"item": [
+				{
+					"name": "List All Files",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is an array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"// Store first file ID for other tests",
+									"if (pm.response.json().length > 0) {",
+									"    pm.environment.set(\"sample_file_id\", pm.response.json()[0].file_id);",
+									"    pm.environment.set(\"sample_file_name\", pm.response.json()[0].file_name);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files"
+							]
+						},
+						"description": "List all files in the S3 Vector bucket with default limit."
+					},
+					"response": []
+				},
+				{
+					"name": "List Files with Limit",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files?limit=5",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "5",
+									"description": "Maximum number of files to return"
+								}
+							]
+						},
+						"description": "List files with a custom limit."
+					},
+					"response": []
+				},
+				{
+					"name": "Get File Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files/{{sample_file_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files",
+								"{{sample_file_id}}"
+							]
+						},
+						"description": "Get detailed information about a specific file. Uses sample_file_id from environment."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files/{{file_id_to_delete}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files",
+								"{{file_id_to_delete}}"
+							]
+						},
+						"description": "Delete a specific file and its vector embedding. Set file_id_to_delete in environment."
+					},
+					"response": []
+				}
+			],
+			"description": "File listing, information retrieval, and deletion"
+		},
+		{
+			"name": "📤 File Upload",
+			"item": [
+				{
+					"name": "Upload File (Multipart)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Upload response has file_id\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.file_id).to.exist;",
+									"    pm.environment.set(\"last_uploaded_file_id\", jsonData.file_id);",
+									"});",
+									"",
+									"pm.test(\"Vector dimension is correct\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.vector_dimension).to.eql(768);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Select a file to upload"
+								},
+								{
+									"key": "metadata",
+									"value": "{\"category\": \"manual_test\", \"author\": \"postman_user\", \"test_type\": \"multipart_upload\"}",
+									"type": "text",
+									"description": "JSON metadata for the file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/upload/file",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"upload",
+								"file"
+							]
+						},
+						"description": "Upload a file using multipart form data. Select a file and optionally modify metadata."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload File (JSON)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Upload response has file_id\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.file_id).to.exist;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_path\": \"tests/fixtures/sample_text.txt\",\n  \"metadata\": {\n    \"category\": \"test\",\n    \"upload_method\": \"json\",\n    \"test_run\": \"postman\"\n  },\n  \"content_type\": \"text/plain\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"upload"
+							]
+						},
+						"description": "Upload a file using JSON payload. File must be accessible inside the container."
+					},
+					"response": []
+				},
+				{
+					"name": "Batch Upload",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Batch response has correct structure\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.total_files).to.exist;",
+									"    pm.expect(jsonData.success_count).to.exist;",
+									"    pm.expect(jsonData.uploaded_files).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"files\": [\n    {\n      \"file_path\": \"tests/fixtures/sample_text.txt\",\n      \"metadata\": {\n        \"batch_id\": \"postman_batch_1\",\n        \"order\": 1,\n        \"category\": \"test\"\n      }\n    },\n    {\n      \"file_path\": \"tests/fixtures/README.md\",\n      \"metadata\": {\n        \"batch_id\": \"postman_batch_1\",\n        \"order\": 2,\n        \"category\": \"documentation\"\n      }\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/upload-batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"upload-batch"
+							]
+						},
+						"description": "Upload multiple files in a single batch operation."
+					},
+					"response": []
+				}
+			],
+			"description": "File upload operations including single and batch uploads"
+		},
+		{
+			"name": "🔍 Similarity Search",
+			"item": [
+				{
+					"name": "Search by Text Query",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Query response has results\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.results).to.be.an('array');",
+									"    pm.expect(jsonData.total_results).to.exist;",
+									"    pm.expect(jsonData.query_time_ms).to.exist;",
+									"});",
+									"",
+									"pm.test(\"Results have similarity scores\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.results.length > 0) {",
+									"        pm.expect(jsonData.results[0].similarity_score).to.exist;",
+									"        pm.expect(jsonData.results[0].file_info).to.exist;",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_text\": \"sample document text\",\n  \"top_k\": 5,\n  \"similarity_threshold\": 0.1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Search for similar files using text query. The service will generate embeddings for the text."
+					},
+					"response": []
+				},
+				{
+					"name": "Search with High Threshold",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_text\": \"test file content\",\n  \"top_k\": 3,\n  \"similarity_threshold\": 0.8\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Search with high similarity threshold to find only very similar content."
+					},
+					"response": []
+				},
+				{
+					"name": "Search with Vector Include",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_text\": \"sample\",\n  \"top_k\": 2\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query?include_vector=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							],
+							"query": [
+								{
+									"key": "include_vector",
+									"value": "true",
+									"description": "Include query vector in response"
+								}
+							]
+						},
+						"description": "Search and include the query vector in the response for debugging."
+					},
+					"response": []
+				},
+				{
+					"name": "Search by Vector (Advanced)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_vector\": [0.1, 0.2, 0.05, -0.1, 0.3, 0.15, -0.05, 0.25],\n  \"top_k\": 3,\n  \"similarity_threshold\": 0.0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Search using a pre-computed vector. Note: Vector must match the model's dimension (768)."
+					},
+					"response": []
+				}
+			],
+			"description": "Vector similarity search operations"
+		},
+		{
+			"name": "🧪 Error Testing",
+			"item": [
+				{
+					"name": "Upload Non-existent File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 4xx or 5xx\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([400, 404, 422, 500]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_path\": \"/nonexistent/file.txt\",\n  \"metadata\": {\"test\": \"error_case\"}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"upload"
+							]
+						},
+						"description": "Test error handling for non-existent file upload."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Non-existent File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 404\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files/non-existent-file-id",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files",
+								"non-existent-file-id"
+							]
+						},
+						"description": "Test error handling for non-existent file retrieval."
+					},
+					"response": []
+				},
+				{
+					"name": "Query with Invalid Parameters",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 422\", function () {",
+									"    pm.response.to.have.status(422);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"top_k\": 999,\n  \"similarity_threshold\": 2.0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Test validation with invalid query parameters (top_k too high, threshold > 1.0)."
+					},
+					"response": []
+				}
+			],
+			"description": "Error handling and validation testing"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Set default environment variables if not set",
+					"if (!pm.environment.get('base_url')) {",
+					"    pm.environment.set('base_url', 'http://localhost:8000');",
+					"}",
+					"",
+					"console.log('Using base URL:', pm.environment.get('base_url'));"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string",
+			"description": "Base URL for the S3 Vector service"
+		},
+		{
+			"key": "sample_file_id",
+			"value": "",
+			"type": "string",
+			"description": "File ID populated by list files request"
+		},
+		{
+			"key": "sample_file_name",
+			"value": "",
+			"type": "string",
+			"description": "File name populated by list files request"
+		},
+		{
+			"key": "last_uploaded_file_id",
+			"value": "",
+			"type": "string",
+			"description": "File ID from last successful upload"
+		},
+		{
+			"key": "file_id_to_delete",
+			"value": "",
+			"type": "string",
+			"description": "Set this to a file ID you want to delete"
+		}
+	]
+} 
