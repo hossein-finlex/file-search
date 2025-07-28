@@ -292,7 +292,8 @@ async def query_similar(request: QueryRequest, include_vector: bool = False):
         results = s3vector_service.query_similar(
             query_vector=query_vector,
             top_k=request.top_k,
-            similarity_threshold=request.similarity_threshold
+            similarity_threshold=request.similarity_threshold,
+            metadata_filter=request.metadata_filter
         )
         
         query_time = (time.time() - start_time) * 1000  # Convert to milliseconds

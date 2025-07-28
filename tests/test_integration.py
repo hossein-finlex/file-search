@@ -314,7 +314,186 @@ class TestS3VectorIntegration(unittest.TestCase):
         
         print(f"✅ Filtered query found {len(result['results'])} results")
     
-    def test_08_get_file_info(self):
+    def test_08_upload_with_rich_metadata(self):
+        """Test uploading files with rich metadata for testing filters"""
+        # Create test files with rich metadata
+        test_files = [
+            {
+                "content": "Advanced machine learning algorithms for natural language processing.",
+                "filename": "advanced_nlp.txt",
+                "metadata": {
+                    "category": "ai",
+                    "subcategory": "nlp", 
+                    "difficulty": 8,
+                    "tags": ["ml", "nlp", "algorithms"],
+                    "published": True,
+                    "year": 2024
+                }
+            },
+            {
+                "content": "Basic introduction to vector databases and similarity search.",
+                "filename": "vector_db_intro.txt",
+                "metadata": {
+                    "category": "database",
+                    "subcategory": "vector",
+                    "difficulty": 3,
+                    "tags": ["database", "vectors", "search"],
+                    "published": True,
+                    "year": 2023
+                }
+            },
+            {
+                "content": "Computer vision techniques for image recognition and classification.",
+                "filename": "computer_vision.txt",
+                "metadata": {
+                    "category": "ai",
+                    "subcategory": "vision",
+                    "difficulty": 7,
+                    "tags": ["cv", "images", "classification"],
+                    "published": False,
+                    "year": 2024
+                }
+            }
+        ]
+        
+        uploaded_files = []
+        for file_data in test_files:
+            file_path = self._create_temp_file(file_data["content"], file_data["filename"])
+            
+            with open(file_path, 'rb') as f:
+                files = {'file': (file_data["filename"], f, 'text/plain')}
+                data = {'metadata': json.dumps(file_data["metadata"])}
+                
+                response = requests.post(
+                    f"{self.base_url}/upload-file",
+                    files=files,
+                    data=data,
+                    timeout=self.api_timeout
+                )
+                
+                self.assertEqual(response.status_code, 200)
+                result = response.json()
+                uploaded_files.append(result['file_id'])
+        
+        # Store uploaded file IDs for later tests
+        self.__class__.rich_metadata_files = uploaded_files
+        print(f"✅ Uploaded {len(uploaded_files)} files with rich metadata")
+    
+    def test_09_query_with_range_metadata_filter(self):
+        """Test metadata filtering with range operations"""
+        query_data = {
+            "query_text": "machine learning",
+            "top_k": 10,
+            "metadata_filter": {
+                "difficulty": {"$gte": 5}
+            }
+        }
+        
+        response = requests.post(
+            f"{self.base_url}/query",
+            json=query_data,
+            timeout=self.api_timeout
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        
+        # Check that all results have difficulty >= 5
+        for item in result['results']:
+            metadata = item.get('file_info', {}).get('metadata', {})
+            if 'difficulty' in metadata:
+                self.assertGreaterEqual(metadata['difficulty'], 5)
+        
+        print(f"✅ Range filter found {len(result['results'])} results with difficulty >= 5")
+    
+    def test_10_query_with_array_metadata_filter(self):
+        """Test metadata filtering with array operations"""
+        query_data = {
+            "query_text": "algorithms",
+            "top_k": 10,
+            "metadata_filter": {
+                "tags": {"$in": ["ml", "algorithms"]}
+            }
+        }
+        
+        response = requests.post(
+            f"{self.base_url}/query",
+            json=query_data,
+            timeout=self.api_timeout
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        
+        # Check that results contain the specified tags
+        for item in result['results']:
+            metadata = item.get('file_info', {}).get('metadata', {})
+            if 'tags' in metadata:
+                tags = metadata['tags']
+                self.assertTrue(any(tag in ["ml", "algorithms"] for tag in tags))
+        
+        print(f"✅ Array filter found {len(result['results'])} results with specified tags")
+    
+    def test_11_query_with_complex_metadata_filter(self):
+        """Test complex metadata filtering with AND logic"""
+        query_data = {
+            "query_text": "artificial intelligence",
+            "top_k": 10,
+            "metadata_filter": {
+                "$and": [
+                    {"category": "ai"},
+                    {"published": True},
+                    {"year": {"$gte": 2024}}
+                ]
+            }
+        }
+        
+        response = requests.post(
+            f"{self.base_url}/query",
+            json=query_data,
+            timeout=self.api_timeout
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        
+        # Check that all results match the complex filter
+        for item in result['results']:
+            metadata = item.get('file_info', {}).get('metadata', {})
+            if all(key in metadata for key in ['category', 'published', 'year']):
+                self.assertEqual(metadata['category'], 'ai')
+                self.assertTrue(metadata['published'])
+                self.assertGreaterEqual(metadata['year'], 2024)
+        
+        print(f"✅ Complex AND filter found {len(result['results'])} results")
+    
+    def test_12_query_with_invalid_metadata_filter(self):
+        """Test error handling for invalid metadata filters"""
+        # Test with invalid operator
+        query_data = {
+            "query_text": "test query",
+            "top_k": 5,
+            "metadata_filter": {
+                "category": {"$invalid_operator": "technology"}
+            }
+        }
+        
+        response = requests.post(
+            f"{self.base_url}/query",
+            json=query_data,
+            timeout=self.api_timeout
+        )
+        
+        # Should still work - the backend will handle invalid operators gracefully
+        # or return an appropriate error
+        self.assertIn(response.status_code, [200, 400])
+        
+        if response.status_code == 200:
+            print("✅ Invalid metadata filter handled gracefully")
+        else:
+            print("✅ Invalid metadata filter returned appropriate error")
+    
+    def test_13_get_file_info(self):
         """Test getting file information"""
         # Use the file ID from the upload test
         if hasattr(self.__class__, 'test_file_id'):

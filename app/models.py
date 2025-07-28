@@ -22,6 +22,7 @@ class QueryRequest(BaseModel):
     query_text: Optional[str] = Field(None, description="Query text to be embedded for similarity search")
     top_k: int = Field(default=10, ge=1, le=100, description="Number of top results to return")
     similarity_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Minimum similarity threshold")
+    metadata_filter: Optional[Dict[str, Any]] = Field(None, description="Metadata filter for query results")
     
     @classmethod
     def model_validate(cls, data):

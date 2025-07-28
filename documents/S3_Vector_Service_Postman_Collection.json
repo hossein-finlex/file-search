@@ -522,6 +522,189 @@
 			"description": "Vector similarity search operations"
 		},
 		{
+			"name": "📊 Metadata Filtering",
+			"item": [
+				{
+					"name": "Query with Simple Metadata Filter",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Results match metadata filter\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.results && jsonData.results.length > 0) {",
+									"        jsonData.results.forEach(function(result) {",
+									"            if (result.file_info && result.file_info.metadata && result.file_info.metadata.category) {",
+									"                pm.expect(result.file_info.metadata.category).to.eql('technology');",
+									"            }",
+									"        });",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_text\": \"database technology\",\n  \"top_k\": 5,\n  \"metadata_filter\": {\n    \"category\": \"technology\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Search with simple metadata filter to find files in a specific category."
+					},
+					"response": []
+				},
+				{
+					"name": "Query with Range Metadata Filter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_text\": \"machine learning\",\n  \"top_k\": 10,\n  \"metadata_filter\": {\n    \"difficulty\": {\"$gte\": 5}\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Search with range filter to find files with difficulty >= 5."
+					},
+					"response": []
+				},
+				{
+					"name": "Query with Array Metadata Filter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_text\": \"algorithms\",\n  \"top_k\": 10,\n  \"metadata_filter\": {\n    \"tags\": {\"$in\": [\"ml\", \"algorithms\", \"ai\"]}\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Search with array filter to find files containing specific tags."
+					},
+					"response": []
+				},
+				{
+					"name": "Query with Complex AND Filter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query_text\": \"artificial intelligence\",\n  \"top_k\": 10,\n  \"metadata_filter\": {\n    \"$and\": [\n      {\"category\": \"ai\"},\n      {\"published\": true},\n      {\"year\": {\"$gte\": 2024}}\n    ]\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"query"
+							]
+						},
+						"description": "Search with complex AND logic combining multiple metadata conditions."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload with Rich Metadata",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Upload response has file_id\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.file_id).to.exist;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_path\": \"tests/fixtures/sample_text.txt\",\n  \"metadata\": {\n    \"category\": \"ai\",\n    \"subcategory\": \"nlp\",\n    \"difficulty\": 8,\n    \"tags\": [\"ml\", \"nlp\", \"algorithms\"],\n    \"published\": true,\n    \"year\": 2024,\n    \"author\": \"AI Researcher\",\n    \"keywords\": [\"machine learning\", \"natural language processing\"]\n  },\n  \"content_type\": \"text/plain\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"upload"
+							]
+						},
+						"description": "Upload a file with rich metadata for testing various filter scenarios."
+					},
+					"response": []
+				}
+			],
+			"description": "Metadata filtering operations and examples"
+		},
+		{
 			"name": "🧪 Error Testing",
 			"item": [
 				{
